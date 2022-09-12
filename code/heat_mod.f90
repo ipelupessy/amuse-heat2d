@@ -3,16 +3,16 @@ module heatmod
 
   implicit none
 
-  real :: dt=0.1
+  real :: dt=0.01
   real :: tnow=0.
   real :: tend=10.
 
-  real :: alpha=1
+  real :: alpha=0.1
 
   integer :: nx=100
   integer :: ny=100
 
-  real :: dx=0.01
+  real :: dx=0.1
 
   real, allocatable :: T(:,:),dT_dt(:,:)
 
@@ -47,8 +47,8 @@ contains
   subroutine calc_dT_dt
 
   dT_dt=0.
-  dT_dt(2:nx-1,2:ny-1)=-alpha*((T(1:nx-2,2:ny-1)+T(3:nx,2:ny-1)-2*T(2:nx-1,2:ny-1))/dx**2 + &
-                               (T(2:nx-1,2:ny-1)+T(2:nx-1,3:ny)-2*T(2:nx-1,2:ny-1))/dx**2 )
+  dT_dt(2:nx-1,2:ny-1)=alpha*((T(1:nx-2,2:ny-1)+T(3:nx,2:ny-1)-2*T(2:nx-1,2:ny-1))/dx**2 + &
+                               (T(2:nx-1,1:ny-2)+T(2:nx-1,3:ny)-2*T(2:nx-1,2:ny-1))/dx**2 )
 
   end subroutine calc_DT_dt
 
@@ -57,10 +57,10 @@ contains
   subroutine step(dt)
     real :: dt
 
-    call set_boundary
     call calc_dT_dt
 
     T=T+dt*dT_dt
+    call set_boundary
     tnow=tnow+dt
 
   end subroutine step
