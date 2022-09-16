@@ -62,8 +62,70 @@ Examine the the output of the build, and the various files. Note you
 go back to the pristine state of the directory with ```make distclean```.
 
 
-
 ### Integrating the source code and building a minimal low level interface
+
+Our first goal will be to integrate the heat equation solver ```code``` into
+the build system of our stub interface. The steps to take, which are explained
+in more detail below, are the following:
+  1. copy the source files to the ```src``` directory. 
+  2. adapt the Makefile in the ```src``` directory to build and link the 
+     ```code``` source.
+  3. add some simple interface functions to verify that we can start up the 
+     code, veryfing that the build was succesful. 
+
+In our case the source code is very simple, and we just copy over the files
+from the ```code``` directory to the ```src``` directory. 
+This will also overwrite the ```Makefile``` in the
+```src``` directory - however we want to retain the building of the library,  
+so make a backup copy of the ```Makefile```, e.g. renaming it ```Makefile.amuse```:
+```bash
+cd heat2d
+cd src
+cp Makefile Makefile.amuse
+cp /path/to/the/code/* ./
+```
+
+At this point we want to merge the two makefiles in ```src```, in a way that 
+retains the build instructions in the ```Makefile``` for the original code 
+and generates a code library as in ```Makefile.amuse```. If we inspect the 
+two makefiles we see that they in fact are very similar and we can just add 
+the build instructions for ```heat_mod.o``` to the ```Makefile.amuse```
+by changing the line
+```
+CODEOBJS = test.o
+```
+to
+```
+CODEOBJS = test.o heat_mod.o
+```
+and copying ```Makefile.amuse``` back to ```Makefile```:
+```
+cp Makefile.amuse Makefile
+rm Makefile.amuse
+```
+
+Note that this is a bit of a coincedence, in practice one should be careful 
+in this step.
+
+We can again verify the interface builds:
+```
+cd ..
+make distclean
+make
+```
+
+Somewhere in the output will be confirmation that our code is part of the now 
+appropiately named ```libheat2d.a```:
+```
+ar: creating libheat2d.a
+a - test.o
+a - heat_mod.o
+```
+
+However, we have not exposed any of the functionality of ```code``` in our interface.
+This is done in the ```interface.f90``` and ```interface.py``` in the root of our 
+stub package.
+
 
 ### Completing the low level interface and testing
 

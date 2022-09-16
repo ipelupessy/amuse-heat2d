@@ -13,3 +13,5 @@ heat: heat_mod.o heat_main.o
 
 clean:
 	rm heat *.o *.mod
+
+distclean: clean
