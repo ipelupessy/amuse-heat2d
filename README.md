@@ -126,6 +126,95 @@ However, we have not exposed any of the functionality of ```code``` in our inter
 This is done in the ```interface.f90``` and ```interface.py``` in the root of our 
 stub package.
 
+First, the ```interface.f90``` looks as follows:
+```fortran
+module heat2dInterface
+
+
+contains
+
+  function echo_int(input, output)
+      integer :: echo
+      integer :: echo_int
+      integer ::  input, output
+      output = echo(input)
+      echo_int = 0
+  end function
+
+end module
+```
+We change this to:
+```fortran
+module heat2dInterface
+  use heatmod
+
+contains
+
+  function commit_parameters() result(ret)
+    integer :: ret
+    
+    call initialize
+    ret=0
+    
+  end function
+
+end module
+```
+the ```use heatmod``` statement allows us access to the fortran module with our simulation code.
+The ```commit_parameters``` (whose naming will be explained below) does nothing more than calling
+the existing initialize function, which upon examination of the code, allocates the 
+simulation variables. We remove the example ```echo_int``` function.
+
+If we look at the ```interface.py``` function we see that it contains two class definitions,
+```Heat2dInterface``` and ```Heat2d```. These define the *low level* and *high level* interfaces of 
+our code. For the moment we will concentrate on ```Heat2dInterface```. We see that it contains 
+the following definition:
+```python
+    @legacy_function
+    def echo_int():
+        function = LegacyFunctionSpecification()  
+        function.addParameter('int_in', dtype='int32', direction=function.IN, unit=None)
+        function.addParameter('int_out', dtype='int32', direction=function.OUT, unit=None)
+        function.result_type = 'int32'
+        function.can_handle_array = True
+        return function
+```
+This defines as part of the interface a function ```echo_int``` with one input 
+parameter and one output parameter and an integer result type. We can compare with the now
+deleted implementation in ```interface.f90```, see above! You can guess that 
+we need to replace this with the corresponding definition for ```commit_parameters```:
+```python
+    @legacy_function
+    def commit_parameters():
+        function = LegacyFunctionSpecification()  
+        function.result_type = 'int32'
+        return function
+```
+or the abbreviated alternative:
+```python
+    @remote_function    
+    def commit_parameters():
+        return ()
+```
+
+With these changes we can compile again. We want to test our changes (and also 
+the tests fails since we have removed a tested function - confirm this!) so
+change ```test1``` in test_heat2d.py:
+```python
+    def test1(self):
+        instance = Heat2dInterface(redirection="none")
+        error = instance.commit_parameters()
+        self.assertEquals(error, 0)
+        instance.stop()
+```
+Confirm that the test works. If you turn on output (```-sv``` pytest flag)
+you should see:
+```
+test_heat2d.py::Heat2dInterfaceTests::test1  initializing model
+```
+In the output, confirming that the relevant part of the code has indeed been called.
+
+
 
 ### Completing the low level interface and testing
 
