@@ -220,9 +220,81 @@ Now we have confirmed the build system and the base functionality of the code
 it is time to expose all variables, parameters and methods we want to be 
 able to access through the interface.
 
+#### Parameters
+
+In order to change the behaviour of the simulation we want to retrieve and set the 
+parameters, which are: the timestep ```dt```, the heat coefficient ```alpha``` and
+the grid size parameters ```nx```, ```ny``` and grid cellsize ```dx```. 
+
+This is implemented as simple getters and setters, e.g.:
+```fortran
+  function get_alpha(alpha_coef)
+    implicit none
+    double precision :: alpha_coef
+    integer :: get_alpha
+    alpha_coef=alpha
+    get_alpha=0
+  end function
+  
+  function set_alpha(alpha_coef)
+    implicit none
+    double precision :: alpha_coef
+    integer :: set_alpha
+    alpha=alpha_coef
+    set_alpha=0
+  end function
+```
+with matching:
+```python
+    @remote_function
+    def get_alpha():
+        returns (alpha_coef=1.)
+
+    @remote_function
+    def set_alpha(alpha_coef=1.):
+        returns ()
+```
+
+Add these functions and write a small test confirming that this works.
+
+Its a bit too tedious to repeat the other functions here, 
+but you can see how you can expose all parameters like this.
+
+Question: can understand why the ```commit_parameters``` is 
+called thus? (if you call a change of say the parameter ```nx``` is 
+it still carried through in the simulation after this?)
+
+#### Variables
+
+The variable declarion section of the fortran module in ```heat_mod.f90``` has 
+two variables we want to be able to read: the model time ```tnow``` and the 
+array with temperatures ```T```.
+
+For the model time we again implement it as a simple getter. For the array variable 
+we need to also specify the array index which we want to retrieve:
+```fortran
+  function get_temperature(i, j, temperature)
+    implicit none
+    integer :: i, j
+    double precision :: temperature
+    integer :: get_temperature
+    temperature=T(i,j)
+    get_temperature=0
+  end function
+```
+and corresponding ```set_temperature```. In the python definition
+```python
+    @remote_function(can_handle_array=True)
+    def get_temperature(i=0, j=0):
+        returns (temperature=0.) 
+```
+we see a new element: the decorator keyword ```can_handle_array``` specifies
+that the python interface function shall also accept arrays and optimizes the
+transport of those.
+
 #### Simulations method
 
-To begin with the latter, by inspecting the file ```heat_mod.90``` of the original
+By inspecting the file ```heat_mod.90``` of the original
 code we see that we want to expose the ```initialize``` and ```step``` functions
 to be able to run a simulation. In addition to this it may be a good idea to add
 a function ```cleanup``` to cleanup memory after the simulations has finished .
@@ -290,70 +362,6 @@ What would be the corresponding python prototype definitions? Answer:
         returns ()
 ```
 
-#### Parameters
-
-In order to change the behaviour of the simulation we want to retrieve and set the 
-parameters, which are: the timestep ```dt```, the heat coefficient ```alpha``` and
-the grid size parameters ```nx```, ```ny``` and grid cellsize ```dx```. 
-
-This is implemented as simple getters and setters, e.g.:
-```fortran
-  function get_alpha(alpha_coef)
-    implicit none
-    double precision :: alpha_coef
-    integer :: get_alpha
-    alpha_coef=alpha
-    get_alpha=0
-  end function
-  
-  function set_alpha(alpha_coef)
-    implicit none
-    double precision :: alpha_coef
-    integer :: set_alpha
-    alpha=alpha_coef
-    set_alpha=0
-  end function
-```
-with matching:
-```python
-    @remote_function
-    def get_alpha():
-        returns (alpha_coef=1.)
-
-    @remote_function
-    def set_alpha(alpha_coef=1.):
-        returns ()
-```
-
-Its a bit too tedious to repeat the other functions here, but we will check those in a bit.
-
-#### Variables
-
-The variable declarion section of the fortran module in ```heat_mod.f90``` has 
-two variables we want to be able to read: the model time ```tnow``` and the 
-array with temperatures ```T```.
-
-For the model time we again implement it as a simple getter. For the array variable 
-we need to also specify the array index which we want to retrieve:
-```fortran
-  function get_temperature(i, j, temperature)
-    implicit none
-    integer :: i, j
-    double precision :: temperature
-    integer :: get_temperature
-    temperature=T(i,j)
-    get_temperature=0
-  end function
-```
-and corresponding ```set_temperature```. In the python definition
-```python
-    @remote_function(can_handle_array=True)
-    def get_temperature(i=0, j=0):
-        returns (temperature=0.) 
-```
-we see a new element: the decorator keyword ```can_handle_array``` specifies
-that the python interface function shall also accept arrays and optimizes the
-transport of those.
 
 #### units
 
@@ -375,13 +383,132 @@ output. So in this case the ```alpha``` coefficient is specified to have units
 in case we want to couple to other codes and hence we specify a definite scaling 
 to the units.
 
+Note that you can define the units in the low level class ```heat2dInterface```,
+but are only visible when using the high level ```heat2d```
+
+Exercise: test this out.
+
+```
+>>> from heat2d import interface
+>>> h=interface.heat2dInterface()
+>>> h.get_alpha()
+OrderedDictionary({'alpha_coef':0.10000000149011612, '__result':0})
+>>> h.stop()
+>>> h=interface.heat2d()
+>>> h.get_alpha()
+quantity<0.10000000149 length**2 * time**-1>
+```
+
+With this it should be clear what is in the ```interface.f90``` and ```heat2dInterface```
+class of ```interface.py```. Check that you indeed understand this.
+
 ### The high level interface
+
+The units are an example of one of the services AMUSE provides. Others 
+are: (1) A data model, (2) management of the code state and (3) defining parameters
+and (4) error handling and stopping conditions. These need to be defined in the 
+high level interface class ```heat2d```.
 
 #### Data model
 
+The low level interface we build above provides access to the simulation grid,
+but hardly any easier than managing the standard fortran arrays. During initialization
+of the high level interface a method, ```define_grid``` is called which allows one to
+define a data structure to handle this. (A stub is part of the parent class 
+InCodeComponentImplementation)
+
+```python
+    def define_grids(self, handler):
+        handler.define_grid('grid',axes_names = ["x", "y"], grid_class=CartesianGrid)
+        handler.set_grid_range('grid', 'get_grid_range')
+        handler.add_getter('grid', 'get_grid_position', names=["x", "y"])
+        handler.add_getter('grid', 'get_temperature', names=["temperature"])
+        handler.add_setter('grid', 'set_temperature', names=["temperature"])
+```
+Try to see if you can figure out what each of the lines do. Answer:
+ 1 ```define_grid``` defines a grid attribute ```grid```, sets its class and defines
+   the axes names.
+ 2 ```set_grid_range``` defines the method used to get the range of the grid
+ 3 ```add_getter``` adds attributes to the grid and defines the getter function used.
+   This is done for the grid position attributes ```x``` and ```y``` as well as the variable 
+   ```temperature```.
+ 4 The ```temperature``` should also be possible to set and this line defines the setter.
+ 
+
+This needs two additional helper methods:
+```python
+    def get_grid_range(self):
+        return 1, self.get_nx(), 1, self.get_ny()
+        
+    def get_grid_position(self, i, j):
+        cellsize=self.get_grid_cellsize()
+        return (i*cellsize, j*cellsize)
+```
+These where not part of the low level interface.
+
 #### State model
 
-#### Properties and other loose ends
+```python
+    def define_state(self, handler):
+        handler.set_initial_state('UNINITIALIZED')
+        
+        handler.add_transition(
+            'UNINITIALIZED', 'INITIALIZED', 'initialize_code')
+        
+        handler.add_method('INITIALIZED', 'before_get_parameter')
+        handler.add_method('INITIALIZED', 'before_set_parameter')
+
+        handler.add_method('RUN', 'before_get_parameter')
+        
+        handler.add_transition('INITIALIZED', 'RUN', "commit_parameters")
+        handler.add_method('RUN', 'evolve_model')
+        
+        handler.add_transition('!UNINITIALIZED!STOPPED', 'END', 'cleanup_code')
+
+        handler.add_transition('END', 'STOPPED', 'stop', False)
+        handler.add_method('STOPPED', 'stop')
+ 
+        # this is needed because temperature needs to be allocated
+        handler.add_method("RUN", "get_temperature")
+        handler.add_method("RUN", "set_temperature")
+```
+
+#### Properties and parameters
+
+```python
+    def define_properties(self, handler):
+        handler.add_property('get_model_time', public_name="model_time")
+```
+
+```python
+    def define_parameters(self, handler):
+
+        handler.add_method_parameter(
+            "get_alpha",
+            "set_alpha",
+            "alpha",
+            "thermal diffusivity", 
+            default_value = 0.01 | generic_unit_system.length**2 /generic_unit_system.time
+        )
+```
+
+
+#### Other loose ends
+
+```python
+    def __init__(self, unit_converter=None, **options):
+        self.unit_converter=unit_converter
+        
+        InCodeComponentImplementation.__init__(self,  heat2dInterface(**options), **options)
+
+    def define_converter(self, handler):
+        if self.unit_converter is not None:
+            handler.set_converter(
+                self.unit_converter.as_converter_from_si_to_generic()
+            )
+
+```
+
 
 #### Testing
 
