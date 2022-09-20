@@ -119,7 +119,7 @@ class BlackBodyEmitterWithHeating:
 
 def coupled_model():
     """
-      Here we will show a simple coupled model of a steel sheet heated by a candle and
+      Here we will show a simple coupled model of a copper sheet heated by a candle and
       emitting its heat. We will develop it as an example of coupling between the 
       heat equation code and a (python based) implementation of simple radiative model.
     
@@ -130,9 +130,9 @@ def coupled_model():
 
     # parameters of the physical model
     thickness=0.1 | units.cm
-    density=8. | units.g/units.cm**3
-    heat_capacity=0.466 | units.J/units.K/units.g
-    thermal_conductivity=45. | units.W/units.m/units.K
+    density=8.92 | units.g/units.cm**3
+    heat_capacity=0.38 | units.J/units.K/units.g
+    thermal_conductivity=401. | units.W/units.m/units.K
     Tenvironment=293 | units.K
     # this is the heating power of a candle:
     heating_power=80. | units.W
@@ -140,7 +140,6 @@ def coupled_model():
     h=heat2d(converter)
 
     cellsize=(1. | units.m) / (h.parameters.Ngrid_x)
-
 
     h.parameters.alpha=thermal_conductivity/(density*heat_capacity)
     h.parameters.cellsize=cellsize
@@ -153,7 +152,7 @@ def coupled_model():
     h.grid.temperature=293. | units.K
     
     # some reasonable number of timesteps
-    tend=0.5 | units.hour
+    tend=0.25 | units.hour
     print(" evolving to: ", tend)
 
     b=BlackBodyEmitterWithHeating(h.grid.copy(), timestep/2, density, heat_capacity, thickness, 
