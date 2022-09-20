@@ -448,6 +448,17 @@ These where not part of the low level interface.
 
 #### State model
 
+If you look at the code there are certain preconditions before the different
+methods in the interface can be called, e.g. before the ```evolve_model```
+the code needs to be initialized (otherwise unallocated memory is accessed) or
+the grid size can be set, but only before initialization.
+
+It would be very tedious if the user of the code would need to remember or 
+lookup the exact calling sequence required, hence we capture this information in
+the interface and manage the state of the code, using a state model.
+
+The definition of the state model is slightly arcane:
+
 ```python
     def define_state(self, handler):
         handler.set_initial_state('UNINITIALIZED')
@@ -473,12 +484,21 @@ These where not part of the low level interface.
         handler.add_method("RUN", "set_temperature")
 ```
 
+Most of the methods used in constructing the state model are more or less 
+self-explanatory. However...
+
 #### Properties and parameters
+
+You can define shorthands for certain variables, e.g. the model time is
+available as property on the class:
 
 ```python
     def define_properties(self, handler):
         handler.add_property('get_model_time', public_name="model_time")
 ```
+
+The code parameters can be gathered in a dict like attribute ```parameters```
+by defining the parameters of the code:
 
 ```python
     def define_parameters(self, handler):
@@ -491,9 +511,14 @@ These where not part of the low level interface.
             default_value = 0.01 | generic_unit_system.length**2 /generic_unit_system.time
         )
 ```
-
+So you provide the getter, setter and a name for the parameters as well as a short description
+and a default value.
 
 #### Other loose ends
+
+If a code is using scaleless units internally and you would like to be able to 
+assign the computation a definite scale, one needs to change the ```__init__``` and
+add the following ```define_converter``` function. 
 
 ```python
     def __init__(self, unit_converter=None, **options):
@@ -506,9 +531,17 @@ These where not part of the low level interface.
             handler.set_converter(
                 self.unit_converter.as_converter_from_si_to_generic()
             )
-
 ```
 
+Try out the following:
+```
+>>> from heat2d import interface
+>>> from amuse.units import units, generic_unit_system
+>>> conv=generic_unit_system.generic_to_si(1| units.K, 1.|units.m, 1.|units.s)
+>>> h=interface.heat2d(conv)
+>>> print(h.parameter.alpha)
+0.10000000149 m**2 * s**-1
+```
 
 #### Testing
 
