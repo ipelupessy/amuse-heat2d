@@ -214,9 +214,166 @@ test_heat2d.py::Heat2dInterfaceTests::test1  initializing model
 ```
 In the output, confirming that the relevant part of the code has indeed been called.
 
-
-
 ### Completing the low level interface and testing
+
+Now we have confirmed the build system and the base functionality of the code 
+it is time to expose all variables, parameters and methods we want to be 
+able to access through the interface.
+
+#### Simulations method
+
+To begin with the latter, by inspecting the file ```heat_mod.90``` of the original
+code we see that we want to expose the ```initialize``` and ```step``` functions
+to be able to run a simulation. In addition to this it may be a good idea to add
+a function ```cleanup``` to cleanup memory after the simulations has finished .
+
+The convention in AMUSE is that each code has a method ```evolve_model(tend)``` which 
+advances the model to a ```tend```, so this can be easily implemented using a 
+call to the ```step``` function. So the following set of interface functions
+in ```interface.f90``` are used for simulation management
+
+```fortran
+  function initialize_code()
+    implicit none
+    integer :: initialize_code
+! nothing to be done
+    initialize_code=0
+  end function
+  
+  function commit_parameters()
+    implicit none
+    integer :: commit_parameters
+! initialize here
+    call initialize
+    commit_parameters=0
+    if(.not.allocated(T)) commit_parameters=-1
+  end function
+  
+  function cleanup_code()
+    implicit none
+    integer :: cleanup_code
+    if(allocated(T)) deallocate(T)
+    if(allocated(dT_dt)) deallocate(dT_dt)
+    cleanup_code=0
+  end function
+  
+  function evolve_model(tend)
+    implicit none
+    double precision :: tend
+    integer :: evolve_model
+    
+    do while(tnow<tend-dt/2)
+      call step(min(dt, real(tend-tnow) ))
+    end do    
+    
+    evolve_model=0
+  end function
+```
+
+What would be the corresponding python prototype definitions? Answer:
+
+```python
+    @remote_function
+    def initialize_code():
+        returns ()
+
+    @remote_function    
+    def commit_parameters():
+        return ()
+    
+    @remote_function
+    def cleanup_code():
+        returns ()
+
+    @remote_function
+    def evolve_model(tend=0.| generic_unit_system.time):
+        returns ()
+```
+
+#### Parameters
+
+In order to change the behaviour of the simulation we want to retrieve and set the 
+parameters, which are: the timestep ```dt```, the heat coefficient ```alpha``` and
+the grid size parameters ```nx```, ```ny``` and grid cellsize ```dx```. 
+
+This is implemented as simple getters and setters, e.g.:
+```fortran
+  function get_alpha(alpha_coef)
+    implicit none
+    double precision :: alpha_coef
+    integer :: get_alpha
+    alpha_coef=alpha
+    get_alpha=0
+  end function
+  
+  function set_alpha(alpha_coef)
+    implicit none
+    double precision :: alpha_coef
+    integer :: set_alpha
+    alpha=alpha_coef
+    set_alpha=0
+  end function
+```
+with matching:
+```python
+    @remote_function
+    def get_alpha():
+        returns (alpha_coef=1.)
+
+    @remote_function
+    def set_alpha(alpha_coef=1.):
+        returns ()
+```
+
+Its a bit too tedious to repeat the other functions here, but we will check those in a bit.
+
+#### Variables
+
+The variable declarion section of the fortran module in ```heat_mod.f90``` has 
+two variables we want to be able to read: the model time ```tnow``` and the 
+array with temperatures ```T```.
+
+For the model time we again implement it as a simple getter. For the array variable 
+we need to also specify the array index which we want to retrieve:
+```fortran
+  function get_temperature(i, j, temperature)
+    implicit none
+    integer :: i, j
+    double precision :: temperature
+    integer :: get_temperature
+    temperature=T(i,j)
+    get_temperature=0
+  end function
+```
+and corresponding ```set_temperature```. In the python definition
+```python
+    @remote_function(can_handle_array=True)
+    def get_temperature(i=0, j=0):
+        returns (temperature=0.) 
+```
+we see a new element: the decorator keyword ```can_handle_array``` specifies
+that the python interface function shall also accept arrays and optimizes the
+transport of those.
+
+#### units
+
+Now when we compare the above low level python interface definitions
+(and any you have added on you own) with the actual implementation, we 
+see another element added to the function in put and out parameters:
+```python
+    @remote_function
+    def get_alpha():
+        returns (alpha_coef=1. | generic_unit_system.length**2 /generic_unit_system.time)
+```
+For each of the function inputs, a unit can be specified. At first this may seems 
+strange: what is this ```generic_unit_system.length**2 /generic_unit_system.time```?
+The reason for this is that we have recognized that the code does not specify any
+units for the positions or cellsizes, nor for the time or temperature. Still its 
+possible to identify unit dimensions that are implictly assumed for the input and
+output. So in this case the ```alpha``` coefficient is specified to have units
+```length**2/time```. We can see later how this information is used by the framework
+in case we want to couple to other codes and hence we specify a definite scaling 
+to the units.
 
 ### The high level interface
 
