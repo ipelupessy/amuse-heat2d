@@ -100,21 +100,18 @@ class heat2d(InCodeComponentImplementation):
         handler.add_method('INITIALIZED', 'before_get_parameter')
         handler.add_method('INITIALIZED', 'before_set_parameter')
 
-        handler.add_method('RUN', 'before_get_parameter')
-        
         handler.add_transition('INITIALIZED', 'RUN', "commit_parameters")
+
+        handler.add_method('RUN', 'before_get_parameter')
+        handler.add_method("RUN", "get_temperature")
+        handler.add_method("RUN", "set_temperature")
         handler.add_method('RUN', 'evolve_model')
         
-        handler.add_transition('!UNINITIALIZED!STOPPED', 'END', 'cleanup_code')
+        handler.add_transition('RUN', 'END', 'cleanup_code')
 
         handler.add_transition('END', 'STOPPED', 'stop', False)
         handler.add_method('STOPPED', 'stop')
  
-        # this is needed because temperature needs to be allocated
-        handler.add_method("RUN", "get_temperature")
-        handler.add_method("RUN", "set_temperature")
-
-
     def define_properties(self, handler):
         handler.add_property('get_model_time', public_name="model_time")
 

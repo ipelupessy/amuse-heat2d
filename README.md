@@ -25,6 +25,12 @@ source env/bin/activate
 pip install numpy docutils mpi4py h5py wheel pytest amuse-framework
 ```
 
+If you are using OpenMPI, its necessary to enable oversubscription of 
+the compute nodes by setting the following environemnt variable:
+```
+export OMPI_MCA_rmaps_base_oversubscribe=true
+```
+
 Starting point of the exercise is the code contained in the directory 
 ```code```. Verify that you can compile and run this code. This code 
 solves the heat equation for a particular problem, and its fairly 
@@ -341,6 +347,9 @@ in ```interface.f90``` are used for simulation management
     evolve_model=0
   end function
 ```
+Note, the ```initialize_code``` function does not do anything here - normally it
+would be a good place to initialize the codes parallel library or logging. Its 
+convention any interface should have this method.
 
 What would be the corresponding python prototype definitions? Answer:
 
@@ -457,7 +466,7 @@ It would be very tedious if the user of the code would need to remember or
 lookup the exact calling sequence required, hence we capture this information in
 the interface and manage the state of the code, using a state model.
 
-The definition of the state model is slightly arcane:
+The definition of the state model is slightly verbose:
 
 ```python
     def define_state(self, handler):
@@ -469,23 +478,30 @@ The definition of the state model is slightly arcane:
         handler.add_method('INITIALIZED', 'before_get_parameter')
         handler.add_method('INITIALIZED', 'before_set_parameter')
 
-        handler.add_method('RUN', 'before_get_parameter')
-        
         handler.add_transition('INITIALIZED', 'RUN', "commit_parameters")
+
+        handler.add_method('RUN', 'before_get_parameter')
+        handler.add_method("RUN", "get_temperature")
+        handler.add_method("RUN", "set_temperature")
         handler.add_method('RUN', 'evolve_model')
         
-        handler.add_transition('!UNINITIALIZED!STOPPED', 'END', 'cleanup_code')
+        handler.add_transition('RUN', 'END', 'cleanup_code')
 
         handler.add_transition('END', 'STOPPED', 'stop', False)
         handler.add_method('STOPPED', 'stop')
- 
-        # this is needed because temperature needs to be allocated
-        handler.add_method("RUN", "get_temperature")
-        handler.add_method("RUN", "set_temperature")
-```
+ ```
 
 Most of the methods used in constructing the state model are more or less 
-self-explanatory. However...
+self-explanatory. The ```set_initial_state``` method names the initial state.
+The ```add_transition``` adds a transition between its first argument and second
+argument triggered by the name of the method in the third argument. If the 
+(string) state names do not exist it is created (same is true for the state
+argument in ```add_method```. A fourth optional boolean argument to add_transition
+indicates whether the call can be automatically triggered by the state model to 
+effect the transition (```True``` by default). By default the interface method 
+can always be called. The ```add_method``` method makes the method named in the 
+second argument only calleable in the state (first arguemnt). Methods can be 
+calleable in multiple states.
 
 #### Properties and parameters
 
@@ -543,7 +559,8 @@ Try out the following:
 0.10000000149 m**2 * s**-1
 ```
 
-#### Testing
+### Testing
+
 
 ### Validation
 

@@ -5,7 +5,7 @@
 
 import numpy
 
-from heat2d.interface import heat2dInterface,heat2d
+from heat2d.interface import heat2d
 
 from matplotlib import pyplot
 
