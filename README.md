@@ -561,9 +561,35 @@ Try out the following:
 
 ### Testing
 
+Normally for the development of an code interface you would write unit tests 
+for the different components of the interface by extending the 
+```test_heat2d.py```.  
 
 ### Validation
 
-### Applications
+The file ```validation.py``` in the scripts directory contains different versions 
+of the "default" run which can be compared against runnig the code stand-alone.
+It is always a good idea to check that the original code runs can be
+reproduced through the interface.
+
+### Application
+
+The strength of the interface lies in the ability to explore more easily new problems.
+The file ```application.py``` considers this by imposing different initial conditions.
+Note that with the use of physical units it is very easy to set and interpret
+the resulting simulation.
 
 ### Coupling example
+
+Finally, we examine an example coupling application in ```scripts/coupling.py```
+In this case we will couple our heat dissipation solver with a simplified model for 
+the heating and cooling of a metal plate. Formally we will solve:
+$${\partial T \over \partial t} = \alpha {\partial^2 T \over \partial x^2} - { \sigma (T^4 -T_0^4) + H \over C \rho h}  $$ 
+by operator splitting, ie alternating solutions of 
+$${\partial T \over \partial t} = \alpha {\partial^2 T \over \partial x^2} $$ 
+(provided by the solver for the heat equation)
+$${\partial T \over \partial t} = - { \sigma (T^4 -T_0^4) + H \over C \rho h}  $$ 
+(provided by the solver for the radiative balance equation)
+
+
+ 
