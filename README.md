@@ -583,13 +583,70 @@ the resulting simulation.
 
 Finally, we examine an example coupling application in ```scripts/coupling.py```
 In this case we will couple our heat dissipation solver with a simplified model for 
-the heating and cooling of a metal plate. Formally we will solve:
+the heating and cooling of a metal plate.
+
+Formally we will solve:
 $${\partial T \over \partial t} = \alpha {\partial^2 T \over \partial x^2} - { \sigma (T^4 -T_0^4) + H \over C \rho h}  $$ 
-by operator splitting, ie alternating solutions of 
+by composing a solution with alternative solutions of the first part and the second part of the RHS.
+The first part is
 $${\partial T \over \partial t} = \alpha {\partial^2 T \over \partial x^2} $$ 
-(provided by the solver for the heat equation)
-$${\partial T \over \partial t} = - { \sigma (T^4 -T_0^4) + H \over C \rho h}  $$ 
-(provided by the solver for the radiative balance equation)
+The solution of this part of course provided by the solver for the heat equation.
+The  second part
+$${\partial T \over \partial t} = - { \sigma (T^4 -T_0^4) + H \over C \rho h}  $$
+is to be provided by a simple integrator for the radiative balance equation:
+```python
+class BlackBodyEmitterWithHeating:
+    def __init__(self, grid, dt, density,heat_capacity, thickness, Tenvironment, heat_power):
+        self.grid=grid
+        self.density=density
+        self.heat_capacity=heat_capacity
+        self.thickness=thickness
+        self.Tenvironment=Tenvironment
+        self.heat_power=heat_power
+        self.cellsize=self.grid.cellsize()[0] 
+        
+        self.dt=dt
+        self.model_time=0. | units.s
+  
+    # emission of radiation by blackbody radiation
+    def emission(self):
+            return constants.Stefan_hyphen_Boltzmann_constant*self.cellsize**2*(self.grid.temperature**4-self.Tenvironment**4)
 
+    def total_emission(self):
+            return self.emission().sum()
 
- 
+    def evolve_model(self, tend):
+        while self.model_time<tend-self.dt/2:
+            cell_mass=self.density*self.thickness*(self.cellsize**2)
+            self.grid.temperature=self.grid.temperature-self.dt*self.emission()/(self.heat_capacity*cell_mass)
+            
+            heating=self.dt*self.heat_power/self.heat_capacity/(4*cell_mass)
+
+            self.grid[49:51,49:51].temperature+=heating
+
+            self.model_time+=self.dt
+```
+In this case we have implemented a code like interface in python, but ofcourse 
+in practice you could use another code.
+
+The essential bit of 
+
+```python
+    h=heat2d(converter)
+    b=BlackBodyEmitterWithHeating(h.grid.copy(), ...)
+        
+    channel1=b.grid.new_channel_to(h.grid)
+    channel2=h.grid.new_channel_to(b.grid)
+
+    tnow=0. | units.s
+    while tnow<tend-timestep/2:
+        b.evolve_model(tnow+timestep/2)
+        channel1.copy_attributes(["temperature"])
+        h.evolve_model(tnow+timestep)
+        channel2.copy_attributes(["temperature"])
+        b.evolve_model(tnow+timestep)
+        channel1.copy_attributes(["temperature"])
+        tnow+=timestep
+```
+This approach of alternating partial solutions to the full equation
+is called operator splitting, or Strang splitting. 
